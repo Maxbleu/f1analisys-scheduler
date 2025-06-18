@@ -1,12 +1,13 @@
-import os
 import json
 import fastf1
 import asyncio
 import requests
+from fastapi import FastAPI
+from typing import Any, Dict
 from utils import get_full_path
-from contextlib import asynccontextmanager
+from storage import AnalysisJsonStorage, SessionsAnalisysJsonStorage
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException
+from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 @asynccontextmanager
@@ -17,7 +18,7 @@ async def lifespan(app: FastAPI):
     scheduler.start()
     app.state.scheduler = scheduler 
 
-    session_analisys = load_sessions_f1analisys()
+    session_analisys = sessions_analisys_json_storage.load()
     schedule_all_sessions(scheduler, session_analisys)
 
     yield 
@@ -25,36 +26,19 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
 
 app = FastAPI(lifespan=lifespan)
-
-SESSIONS_ANALISYS_FILE = "sessions_analisys.json"
-ANALISYS_FILE = "analisys.json"
+sessions_analisys_json_storage = SessionsAnalisysJsonStorage()
+analisys_json_storage = AnalysisJsonStorage()
 API_ANALYSIS_URL = "https://f1analisys-production.up.railway.app"
 
-# Cargar almacenamiento de imágenes
-def load_storage():
-    if os.path.exists(ANALISYS_FILE):
-        with open(ANALISYS_FILE, "r") as f:
-            return json.load(f)
-    return {}
-
-def save_storage(storage):
-    with open(ANALISYS_FILE, "w") as f:
-        json.dump(storage, f)
-
-# Obtener los analisis de las sesiones
-def load_sessions_f1analisys():
-    with open(SESSIONS_ANALISYS_FILE, "r") as f:
-        return json.load(f)
-
 # Obtener imagen del servidor f1analisys
-async def fetch_and_store_analysis(job_id, type_event, year, event, session, analises):
+async def fetch_and_store_analysis(job_id: str, type_event: str, year: int, event: int, session: str, analises: dict):
     try:
         for analisys in analises:
             url = API_ANALYSIS_URL+"/api"+get_full_path(type_event, year, event, session, analisys)+"?convert_to_bytes=True"
             response = requests.get(url)
             if response.status_code == 200:
                 json = response.json()
-                storage = load_storage()
+                storage = analisys_json_storage.load()
                 if not storage:
                     storage = {
                         job_id: {
@@ -63,27 +47,35 @@ async def fetch_and_store_analysis(job_id, type_event, year, event, session, ana
                     }
                 else:
                     storage.setdefault(job_id, {})[analisys] = json
-                save_storage(storage)
+                analisys_json_storage.save(storage)
                 print(f"[✓] Imagen guardada para {job_id}")
     except Exception as e:
         print(f"[X] Error para {job_id}: {e}")
 
 # Leer calendario y programar las tareas
-def schedule_all_sessions(scheduler: AsyncIOScheduler, sessions_analisys):
+def schedule_all_sessions(scheduler: AsyncIOScheduler, sessions_analisys: dict):
     year = datetime.now().year
     events = fastf1.get_events_remaining()
     for _, row in events.iterrows():
         try:
-            event = row["RoundNumber"]
-            gp_event = fastf1.get_event(year, event)
-            for n_session in range(1, 6):
+            if row["EventFormat"] == "testing":
+                n_sessions = 4
+                type_event = "pretest"
+                event = 1
+                f1_event = fastf1.get_testing_event(year,event)
+            else:
+                n_sessions = 6
+                type_event = "official"
+                event = row["RoundNumber"]
+                f1_event = fastf1.get_event(year, event)
+            print("[🏎️] Programando el evento: ", row["OfficialEventName"])
+            for n_session in range(1, n_sessions):
                 try:
-                    session_start = gp_event.get_session_date(n_session)
+                    session_start = f1_event.get_session_date(n_session)
                     run_time = session_start + timedelta(hours=2)
-                    session_name = gp_event.get_session_name(n_session)
+                    session_name = f1_event.get_session_name(n_session)
                     analises = sessions_analisys[session_name]
                     job_id = f"{event}_{session_name}"
-                    type_event = "official"
                     scheduler.add_job(
                         fetch_and_store_analysis,
                         trigger="date",
@@ -98,10 +90,20 @@ def schedule_all_sessions(scheduler: AsyncIOScheduler, sessions_analisys):
         except Exception as e:
             print(f"Error al obtener evento: {e}")
 
-# Endpoint para consultar una imagen por session_id
-@app.get("/images/{session_id}")
-def get_image(session_id: str):
-    storage = load_storage()
-    if session_id not in storage:
-        raise HTTPException(status_code=404, detail="Imagen no encontrada")
-    return {"session_id": session_id, "image_base64": storage[session_id]}
+# Endpoint para obtener todas las sesiones
+@app.get("/analises")
+def get_analises():
+    storage = analisys_json_storage.load()
+    analisys_json_storage.save("")
+    return storage
+
+# Enpoint para obtener los analisis que se subirán en cada sesión
+@app.get("/sessions_analisys")
+def get_sessions_analisys():
+    sessions_analisys = sessions_analisys_json_storage.load()
+    return sessions_analisys
+
+# Enpoint para actualizar el archivo de analisis que se subirán por sesión
+@app.post("/update_sessions_analisys")
+def update_sessions_analisys(sessions_analisys: Dict[str, Any]):
+    sessions_analisys_json_storage.save(sessions_analisys)
