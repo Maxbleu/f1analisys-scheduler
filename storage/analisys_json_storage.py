@@ -14,7 +14,7 @@ class AnalysisJsonStorage(StorageInterface):
         if os.path.exists(ANALISYS_FILE):
             with open(ANALISYS_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
-        return {}
+        return []
 
     def save(self, data: Dict[str, Any]) -> None:
         os.makedirs(os.path.dirname(ANALISYS_FILE) or ".", exist_ok=True)

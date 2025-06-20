@@ -2,13 +2,15 @@ import json
 import fastf1
 import asyncio
 import requests
+from posts import get_promt
 from fastapi import FastAPI
 from typing import Any, Dict
-from utils import get_full_path
+from utils import get_full_path, get_session, get_first_gp_date
 from storage import AnalysisJsonStorage, SessionsAnalisysJsonStorage
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.schedulers.background import BackgroundScheduler
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -20,6 +22,7 @@ async def lifespan(app: FastAPI):
 
     session_analisys = sessions_analisys_json_storage.load()
     schedule_all_sessions(scheduler, session_analisys)
+    schedule_next_year(scheduler, session_analisys)
 
     yield 
 
@@ -33,20 +36,21 @@ API_ANALYSIS_URL = "https://f1analisys-production.up.railway.app"
 # Obtener imagen del servidor f1analisys
 async def fetch_and_store_analysis(job_id: str, type_event: str, year: int, event: int, session: str, analises: dict):
     try:
+        obj_session = get_session(type_event, year, event, session)
         for analisys in analises:
-            url = API_ANALYSIS_URL+"/api"+get_full_path(type_event, year, event, session, analisys)+"?convert_to_bytes=True"
+            url = API_ANALYSIS_URL+"/api"+get_full_path(type_event, year, event, session, obj_session, analisys)+"?convert_to_bytes=True"
             response = requests.get(url)
             if response.status_code == 200:
                 json = response.json()
+                promt = get_promt(obj_session, analisys)
                 storage = analisys_json_storage.load()
                 if not storage:
-                    storage = {
-                        job_id: {
-                            analisys:json
-                        }
-                    }
+                    storage.append({
+                        "session_name": job_id,
+                        "analises": [ {"image": json} ]
+                    })
                 else:
-                    storage.setdefault(job_id, {})[analisys] = json
+                    storage["analises"].append({"image": json})
                 analisys_json_storage.save(storage)
                 print(f"[✓] Imagen guardada para {job_id}")
     except Exception as e:
@@ -75,13 +79,12 @@ def schedule_all_sessions(scheduler: AsyncIOScheduler, sessions_analisys: dict):
                     run_time = session_start + timedelta(hours=2)
                     session_name = f1_event.get_session_name(n_session)
                     analises = sessions_analisys[session_name]
-                    job_id = f"{event}_{session_name}"
                     scheduler.add_job(
                         fetch_and_store_analysis,
                         trigger="date",
                         run_date=run_time,
-                        args=[job_id, type_event, year, event, session_name, analises],
-                        id=job_id,
+                        args=[session_name, type_event, year, event, session_name, analises],
+                        id=session_name,
                         replace_existing=True
                     )
                     print(f"[🕒] Programado {session_name} para {run_time}")
@@ -89,6 +92,39 @@ def schedule_all_sessions(scheduler: AsyncIOScheduler, sessions_analisys: dict):
                     print(f"Error en sesión {n_session}: {e}")
         except Exception as e:
             print(f"Error al obtener evento: {e}")
+
+# Programa cargar todas las sesiones del año una semana antes del primer gp
+def schedule_one_week_before(scheduler: AsyncIOScheduler, sessions_analisys: dict):
+    year = datetime.now().year
+    gp_date = get_first_gp_date(year)         # pandas.Timestamp
+    run_date = gp_date - timedelta(weeks=1)
+    print(f"[Debug] primer GP: {gp_date}, ejecútame en {run_date}")
+
+    scheduler.add_job(
+        schedule_all_sessions,
+        trigger="date",
+        run_date=run_date,
+        args=[scheduler, sessions_analisys],
+        id="schedule_all_sessions_before_first_gp",
+        replace_existing=True
+    )
+    print(f"[Scheduler] schedule_all_sessions programado para {run_date.isoformat()}")
+    schedule_next_year(scheduler, sessions_analisys)
+
+# Programar ejecutar una acción el primer día del siguiente año
+def schedule_next_year(scheduler: AsyncIOScheduler, session_analisys: dict):
+
+    next_year = datetime.now().year + 1
+    target_date = datetime(next_year, 1, 1)
+    scheduler.add_job(
+        schedule_one_week_before,
+        trigger="date",
+        run_date=target_date,
+        args=[scheduler, session_analisys],
+        id="schedule_one_week_before",
+        replace_existing=True
+    )
+    print(f"[Scheduler] schedule_one_week_before programado para {target_date.isoformat()}")
 
 # Endpoint para obtener todas las sesiones
 @app.get("/analises")

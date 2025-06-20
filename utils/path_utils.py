@@ -24,12 +24,12 @@ def get_drivers_laps_path(drivers_laps_range: dict) -> str:
             drivers_path += "/vs"
     return drivers_path
 
-def get_full_path(type_event, year, event, session, analisys):
+def get_full_path(type_event, year, event, session, obj_session, analisys):
     full_path = f"/{type_event}/{analisys}/{year}/{event}/{session}"
     pilotos_paths = get_pilotos_info_path()
     result = any(analisys in path for path in pilotos_paths)
     if result:
-        drivers_laps = get_top3_fastest_laps(type_event, year, event, session)
+        drivers_laps = get_top3_fastest_laps(obj_session)
         drivers_path = get_drivers_laps_path(drivers_laps)
         full_path = full_path+drivers_path
     return full_path
