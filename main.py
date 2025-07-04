@@ -1,6 +1,7 @@
 import json
 import fastf1
 import asyncio
+import logging
 import requests
 from posts import get_promt
 from fastapi import FastAPI
@@ -10,7 +11,6 @@ from storage import AnalysisJsonStorage, SessionsAnalisysJsonStorage
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.schedulers.background import BackgroundScheduler
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -29,6 +29,8 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
 
 app = FastAPI(lifespan=lifespan)
+logger = logging.getLogger("uvicorn")
+logging.basicConfig(level=logging.INFO)
 sessions_analisys_json_storage = SessionsAnalisysJsonStorage()
 analisys_json_storage = AnalysisJsonStorage()
 API_ANALYSIS_URL = "https://f1analisys-production.up.railway.app"
@@ -53,6 +55,7 @@ async def fetch_and_store_analysis(job_id: str, type_event: str, year: int, even
                     storage["analises"].append({"image": json})
                 analisys_json_storage.save(storage)
                 print(f"[✓] Imagen guardada para {job_id}")
+                logger.info(f"[✓] Imagen guardada para {job_id}")
     except Exception as e:
         print(f"[X] Error para {job_id}: {e}")
 
@@ -73,6 +76,7 @@ def schedule_all_sessions(scheduler: AsyncIOScheduler, sessions_analisys: dict):
                 event = row["RoundNumber"]
                 f1_event = fastf1.get_event(year, event)
             print("[🏎️] Programando el evento: ", row["OfficialEventName"])
+            logger.info("[🏎️] Programando el evento: ", row["OfficialEventName"])
             for n_session in range(1, n_sessions):
                 try:
                     session_start = f1_event.get_session_date(n_session)
@@ -88,6 +92,7 @@ def schedule_all_sessions(scheduler: AsyncIOScheduler, sessions_analisys: dict):
                         replace_existing=True
                     )
                     print(f"[🕒] Programado {session_name} para {run_time}")
+                    logger.info(f"[🕒] Programado {session_name} para {run_time}")
                 except Exception as e:
                     print(f"Error en sesión {n_session}: {e}")
         except Exception as e:
