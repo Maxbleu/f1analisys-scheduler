@@ -1,10 +1,10 @@
+import os
 import json
 import fastf1
 import asyncio
 import logging
 import requests
 import traceback
-from posts import get_promt
 from fastapi import FastAPI
 from typing import Any, Dict
 from utils import get_full_path, get_session, get_first_gp_date
@@ -44,27 +44,29 @@ analisys_json_storage = AnalysisJsonStorage()
 API_ANALYSIS_URL = "https://f1analisys-production.up.railway.app"
 
 # Obtener imagen del servidor f1analisys
-async def fetch_and_store_analysis(job_id: str, type_event: str, year: int, event: int, session: str, analises: dict):
+async def fetch_and_store_analysis(job_id: str, type_event: str, year: int, event: int, session: str, analises: list):
     try:
-        obj_session = get_session(type_event, year, event, session)
-        for analisys in analises:
-            url = API_ANALYSIS_URL+"/api"+get_full_path(type_event, year, event, session, obj_session, analisys)+"?convert_to_bytes=True"
-            response = requests.get(url)
+        headers = {
+            "Authorization": f"Bearer {os.getenv("JWT_SECRET")}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "type_event": type_event,
+            "year": year,
+            "round": event,
+            "session": session
+        }
+        for analise in analises:
+            data["analisys"] = data["analisys"] = analise if isinstance(analise, list) else data["analisys"] = [analise]
+            response = requests.post(
+                url="https://primary-production-73f0.up.railway.app/webhook/webhook",
+                headers=headers,
+                json=data
+            )
             if response.status_code == 200:
-                json = response.json()
-                promt = get_promt(obj_session, analisys)
-                storage = analisys_json_storage.load()
-                if not storage:
-                    storage.append({
-                        "session_name": job_id,
-                        "analises": [ {"image": json} ]
-                    })
-                else:
-                    storage["analises"].append({"image": json})
-                analisys_json_storage.save(storage)
-                logger.info(f"[✓] Imagen guardada para {job_id}")
+                logger.info(f"✅ Analisis {analise} publicado correctamente")
     except Exception as e:
-        logger.error(f"[X] Error para {job_id}: {e}")
+        logger.error(f"❌ Error para {job_id}: {e}")
 
 # Leer calendario y programar las tareas
 def schedule_all_sessions(scheduler: AsyncIOScheduler, sessions_analisys: dict):
@@ -99,9 +101,9 @@ def schedule_all_sessions(scheduler: AsyncIOScheduler, sessions_analisys: dict):
                     )
                     logger.info(f"[🕒] Programado {session_name} para {run_time}")
                 except Exception as e:
-                    logger.error(f"Error en sesión {n_session}: {e}")
+                    logger.error(f"❌ Error en sesión {n_session}: {e}")
         except Exception as e:
-            logger.error(f"Error al obtener evento: {e}")
+            logger.error(f"❌ Error al obtener evento: {e}")
 
 # Programa cargar todas las sesiones del año una semana antes del primer gp
 def schedule_one_week_before(scheduler: AsyncIOScheduler, sessions_analisys: dict):

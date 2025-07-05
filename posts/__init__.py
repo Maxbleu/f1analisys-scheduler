@@ -1,1 +1,0 @@
-from posts.promts import get_promt
