@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 logger = logging.getLogger("uvicorn")
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 sessions_analisys_json_storage = SessionsAnalisysJsonStorage()
 analisys_json_storage = AnalysisJsonStorage()
 API_ANALYSIS_URL = "https://f1analisys-production.up.railway.app"
@@ -114,6 +114,7 @@ def schedule_one_week_before(scheduler: AsyncIOScheduler, sessions_analisys: dic
         replace_existing=True
     )
     print(f"[Scheduler] schedule_all_sessions programado para {run_date.isoformat()}")
+    logger.info(f"[Scheduler] schedule_all_sessions programado para {run_date.isoformat()}")
     schedule_next_year(scheduler, sessions_analisys)
 
 # Programar ejecutar una acción el primer día del siguiente año
@@ -130,6 +131,7 @@ def schedule_next_year(scheduler: AsyncIOScheduler, session_analisys: dict):
         replace_existing=True
     )
     print(f"[Scheduler] schedule_one_week_before programado para {target_date.isoformat()}")
+    logger.info(f"[Scheduler] schedule_one_week_before programado para {target_date.isoformat()}")
 
 # Endpoint para obtener todas las sesiones
 @app.get("/analises")
