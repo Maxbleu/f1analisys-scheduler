@@ -3,6 +3,7 @@ import fastf1
 import asyncio
 import logging
 import requests
+import traceback
 from posts import get_promt
 from fastapi import FastAPI
 from typing import Any, Dict
@@ -12,25 +13,32 @@ from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    loop = asyncio.get_running_loop()
-
-    scheduler = AsyncIOScheduler(event_loop=loop)
-    scheduler.start()
-    app.state.scheduler = scheduler 
-
-    session_analisys = sessions_analisys_json_storage.load()
-    schedule_all_sessions(scheduler, session_analisys)
-    schedule_next_year(scheduler, session_analisys)
-
-    yield 
-
-    scheduler.shutdown()
-
-app = FastAPI(lifespan=lifespan)
 logger = logging.getLogger("uvicorn")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger.info("⚙️F1Analisys-Scheduler se ha iniciado")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        loop = asyncio.get_running_loop()
+        scheduler = AsyncIOScheduler(event_loop=loop)
+        scheduler.start()
+        app.state.scheduler = scheduler 
+
+        session_analisys = sessions_analisys_json_storage.load()
+        schedule_all_sessions(scheduler, session_analisys)
+        schedule_next_year(scheduler, session_analisys)
+
+        yield
+
+    except Exception as e:
+        print("ERROR en lifespan:", e)
+        traceback.print_exc()
+        raise e
+    finally:
+        scheduler.shutdown()
+
+app = FastAPI(lifespan=lifespan)
 sessions_analisys_json_storage = SessionsAnalisysJsonStorage()
 analisys_json_storage = AnalysisJsonStorage()
 API_ANALYSIS_URL = "https://f1analisys-production.up.railway.app"
@@ -54,10 +62,9 @@ async def fetch_and_store_analysis(job_id: str, type_event: str, year: int, even
                 else:
                     storage["analises"].append({"image": json})
                 analisys_json_storage.save(storage)
-                print(f"[✓] Imagen guardada para {job_id}")
                 logger.info(f"[✓] Imagen guardada para {job_id}")
     except Exception as e:
-        print(f"[X] Error para {job_id}: {e}")
+        logger.error(f"[X] Error para {job_id}: {e}")
 
 # Leer calendario y programar las tareas
 def schedule_all_sessions(scheduler: AsyncIOScheduler, sessions_analisys: dict):
@@ -75,8 +82,7 @@ def schedule_all_sessions(scheduler: AsyncIOScheduler, sessions_analisys: dict):
                 type_event = "official"
                 event = row["RoundNumber"]
                 f1_event = fastf1.get_event(year, event)
-            print("[🏎️] Programando el evento: ", row["OfficialEventName"])
-            logger.info("[🏎️] Programando el evento: ", row["OfficialEventName"])
+            logger.info(f"[🏎️] Programando el evento: {row["OfficialEventName"]}")
             for n_session in range(1, n_sessions):
                 try:
                     session_start = f1_event.get_session_date(n_session)
@@ -91,12 +97,11 @@ def schedule_all_sessions(scheduler: AsyncIOScheduler, sessions_analisys: dict):
                         id=session_name,
                         replace_existing=True
                     )
-                    print(f"[🕒] Programado {session_name} para {run_time}")
                     logger.info(f"[🕒] Programado {session_name} para {run_time}")
                 except Exception as e:
-                    print(f"Error en sesión {n_session}: {e}")
+                    logger.error(f"Error en sesión {n_session}: {e}")
         except Exception as e:
-            print(f"Error al obtener evento: {e}")
+            logger.error(f"Error al obtener evento: {e}")
 
 # Programa cargar todas las sesiones del año una semana antes del primer gp
 def schedule_one_week_before(scheduler: AsyncIOScheduler, sessions_analisys: dict):
@@ -113,7 +118,6 @@ def schedule_one_week_before(scheduler: AsyncIOScheduler, sessions_analisys: dic
         id="schedule_all_sessions_before_first_gp",
         replace_existing=True
     )
-    print(f"[Scheduler] schedule_all_sessions programado para {run_date.isoformat()}")
     logger.info(f"[Scheduler] schedule_all_sessions programado para {run_date.isoformat()}")
     schedule_next_year(scheduler, sessions_analisys)
 
@@ -130,7 +134,6 @@ def schedule_next_year(scheduler: AsyncIOScheduler, session_analisys: dict):
         id="schedule_one_week_before",
         replace_existing=True
     )
-    print(f"[Scheduler] schedule_one_week_before programado para {target_date.isoformat()}")
     logger.info(f"[Scheduler] schedule_one_week_before programado para {target_date.isoformat()}")
 
 # Endpoint para obtener todas las sesiones
