@@ -57,7 +57,7 @@ async def fetch_and_store_analysis(job_id: str, type_event: str, year: int, even
             "session": session
         }
         for analise in analises:
-            data["analisys"] = data["analisys"] = analise if isinstance(analise, list) else data["analisys"] = [analise]
+            data["analisys"] = analise if isinstance(analise, list) else data["analisys"]
             response = requests.post(
                 url="https://primary-production-73f0.up.railway.app/webhook/webhook",
                 headers=headers,
