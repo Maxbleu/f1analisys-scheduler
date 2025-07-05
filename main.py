@@ -47,7 +47,7 @@ API_ANALYSIS_URL = "https://f1analisys-production.up.railway.app"
 async def fetch_and_store_analysis(job_id: str, type_event: str, year: int, event: int, session: str, analises: list):
     try:
         headers = {
-            "Authorization": f"Bearer {os.getenv("JWT_SECRET")}",
+            "Authorization": f"Bearer {os.getenv('JWT_SECRET')}",
             "Content-Type": "application/json"
         }
         data = {
