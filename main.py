@@ -82,7 +82,7 @@ def schedule_all_sessions(scheduler: AsyncIOScheduler, sessions_analisys: dict):
                 type_event = "official"
                 event = row["RoundNumber"]
                 f1_event = fastf1.get_event(year, event)
-            logger.info(f"[🏎️] Programando el evento: {row["OfficialEventName"]}")
+            logger.info(f"[🏎️] Programando el evento: {row['OfficialEventName']}")
             for n_session in range(1, n_sessions):
                 try:
                     session_start = f1_event.get_session_date(n_session)
