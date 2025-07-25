@@ -9,18 +9,18 @@
         ["track_dominance","comparative_lap_time"],"top_speed"
     ],
     "Qualifying":[
-        ["track_dominance","comparative_lap_time"],"team_performace","fastest_laps","top_speed"
+        ["track_dominance","comparative_lap_time"],"team_performace","optimal_lap_impact","top_speed"
     ],
     "Sprint Qualifying":[
-        ["track_dominance","comparative_lap_time"],"team_performace","fastest_laps","top_speed"
+        ["track_dominance","comparative_lap_time"],"team_performace","optimal_lap_impact","top_speed"
     ],
     "Sprint Shootout":[
-        ["track_dominance","comparative_lap_time"],"team_performace","fastest_laps","top_speed"
+        ["track_dominance","comparative_lap_time"],"team_performace","optimal_lap_impact","top_speed"
     ],
     "Sprint":[
-        "race_position_evolution",["track_dominance","comparative_lap_time"],"team_performace","fastest_laps","fastest_drivers_compound","top_speed"
+        "race_position_evolution",["track_dominance","comparative_lap_time"],"team_performace","fastest_drivers_compound","top_speed"
     ],
     "Race":[
-        "race_position_evolution",["track_dominance","comparative_lap_time"],"team_performace","fastest_laps","fastest_drivers_compound","top_speed"
+        "race_position_evolution",["track_dominance","comparative_lap_time"],"team_performace","fastest_drivers_compound","top_speed"
     ]
 }
