@@ -5,9 +5,10 @@ import asyncio
 import logging
 import requests
 import traceback
+import pandas as pd
 from fastapi import FastAPI
 from typing import Any, Dict
-from utils import get_full_path, get_session, get_first_gp_date
+from utils import get_first_gp_date
 from storage import AnalysisJsonStorage, SessionsAnalisysJsonStorage
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
@@ -36,7 +37,8 @@ async def lifespan(app: FastAPI):
         traceback.print_exc()
         raise e
     finally:
-        scheduler.shutdown()
+        if hasattr(app.state, 'scheduler'):
+            app.state.scheduler.shutdown()
 
 app = FastAPI(lifespan=lifespan)
 sessions_analisys_json_storage = SessionsAnalisysJsonStorage()
@@ -47,7 +49,7 @@ API_ANALYSIS_URL = "https://f1analisys-production.up.railway.app"
 async def fetch_and_store_analysis(job_id: str, type_event: str, year: int, event: int, session: str, analises: list):
     try:
         headers = {
-            "Authorization": f"Bearer {os.getenv('JWT_SECRET')}",
+            #"Authorization": f"Bearer {os.getenv('JWT_SECRET')}",
             "Content-Type": "application/json"
         }
         data = {
@@ -59,7 +61,7 @@ async def fetch_and_store_analysis(job_id: str, type_event: str, year: int, even
         for analise in analises:
             data["analisys"] = analise if isinstance(analise, list) else data["analisys"]
             response = requests.post(
-                url="https://primary-production-73f0.up.railway.app/webhook/webhook",
+                url="https://primary-production-73f0.up.railway.app/webhook-test/publish/post",
                 headers=headers,
                 json=data
             )
@@ -72,6 +74,8 @@ async def fetch_and_store_analysis(job_id: str, type_event: str, year: int, even
 def schedule_all_sessions(scheduler: AsyncIOScheduler, sessions_analisys: dict):
     year = datetime.now().year
     events = fastf1.get_events_remaining()
+
+    one_is_fetched = False
     for _, row in events.iterrows():
         try:
             if row["EventFormat"] == "testing":
@@ -89,17 +93,26 @@ def schedule_all_sessions(scheduler: AsyncIOScheduler, sessions_analisys: dict):
                 try:
                     session_start = f1_event.get_session_date(n_session)
                     run_time = session_start + timedelta(hours=2)
+
+                    session_timestamp = session_start.timestamp()
+                    now_timestamp = datetime.now().timestamp()
+                    if session_timestamp < now_timestamp: continue
+
                     session_name = f1_event.get_session_name(n_session)
                     analises = sessions_analisys[session_name]
-                    scheduler.add_job(
-                        fetch_and_store_analysis,
-                        trigger="date",
-                        run_date=run_time,
-                        args=[session_name, type_event, year, event, session_name, analises],
-                        id=session_name,
-                        replace_existing=True
-                    )
-                    logger.info(f"[🕒] Programado {session_name} para {run_time}")
+                    job_id = f"{year}_{event}_{session_name}"
+
+                    if not one_is_fetched:
+                        scheduler.add_job(
+                            fetch_and_store_analysis,
+                            trigger="data",
+                            run_date=run_time,
+                            args=[job_id, type_event, year, event, n_session, analises],
+                            id=job_id,
+                            replace_existing=True
+                        )
+                        logger.info(f"[🕒] Programado {session_name} para {run_time}")
+                        one_is_fetched = True
                 except Exception as e:
                     logger.error(f"❌ Error en sesión {n_session}: {e}")
         except Exception as e:
@@ -108,7 +121,7 @@ def schedule_all_sessions(scheduler: AsyncIOScheduler, sessions_analisys: dict):
 # Programa cargar todas las sesiones del año una semana antes del primer gp
 def schedule_one_week_before(scheduler: AsyncIOScheduler, sessions_analisys: dict):
     year = datetime.now().year
-    gp_date = get_first_gp_date(year)         # pandas.Timestamp
+    gp_date = get_first_gp_date(year)
     run_date = gp_date - timedelta(weeks=1)
     print(f"[Debug] primer GP: {gp_date}, ejecútame en {run_date}")
 
