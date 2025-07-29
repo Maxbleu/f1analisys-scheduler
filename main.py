@@ -45,7 +45,7 @@ sessions_analisys_json_storage = SessionsAnalisysJsonStorage()
 analisys_json_storage = AnalysisJsonStorage()
 API_ANALYSIS_URL = "https://f1analisys-production.up.railway.app"
 
-# Obtener imagen del servidor f1analisys
+# Publicar el post en las redes sociales
 async def fetch_and_store_analysis(job_id: str, type_event: str, year: int, event: int, session: str, analises: list):
     try:
         headers = {
@@ -61,7 +61,7 @@ async def fetch_and_store_analysis(job_id: str, type_event: str, year: int, even
         for analise in analises:
             data["analisys"] = analise if isinstance(analise, list) else data["analisys"]
             response = requests.post(
-                url="https://primary-production-73f0.up.railway.app/webhook-test/publish/post",
+                url="https://primary-production-73f0.up.railway.app/webhook/publish/post",
                 headers=headers,
                 json=data
             )
@@ -74,8 +74,6 @@ async def fetch_and_store_analysis(job_id: str, type_event: str, year: int, even
 def schedule_all_sessions(scheduler: AsyncIOScheduler, sessions_analisys: dict):
     year = datetime.now().year
     events = fastf1.get_events_remaining()
-
-    one_is_fetched = False
     for _, row in events.iterrows():
         try:
             if row["EventFormat"] == "testing":
@@ -102,17 +100,15 @@ def schedule_all_sessions(scheduler: AsyncIOScheduler, sessions_analisys: dict):
                     analises = sessions_analisys[session_name]
                     job_id = f"{year}_{event}_{session_name}"
 
-                    if not one_is_fetched:
-                        scheduler.add_job(
-                            fetch_and_store_analysis,
-                            trigger="data",
-                            run_date=run_time,
-                            args=[job_id, type_event, year, event, n_session, analises],
-                            id=job_id,
-                            replace_existing=True
-                        )
-                        logger.info(f"[🕒] Programado {session_name} para {run_time}")
-                        one_is_fetched = True
+                    scheduler.add_job(
+                        fetch_and_store_analysis,
+                        trigger="date",
+                        run_date=run_time,
+                        args=[job_id, type_event, year, event, n_session, analises],
+                        id=job_id,
+                        replace_existing=True
+                    )
+                    logger.info(f"[🕒] Programado {session_name} para {run_time}")
                 except Exception as e:
                     logger.error(f"❌ Error en sesión {n_session}: {e}")
         except Exception as e:
