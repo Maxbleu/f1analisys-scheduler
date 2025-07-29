@@ -45,7 +45,7 @@ sessions_analisys_json_storage = SessionsAnalisysJsonStorage()
 analisys_json_storage = AnalysisJsonStorage()
 API_ANALYSIS_URL = "https://f1analisys-production.up.railway.app"
 
-# Obtener imagen del servidor f1analisys
+# Publicar el post en las redes sociales
 async def fetch_and_store_analysis(job_id: str, type_event: str, year: int, event: int, session: str, analises: list):
     try:
         headers = {
@@ -61,7 +61,7 @@ async def fetch_and_store_analysis(job_id: str, type_event: str, year: int, even
         for analise in analises:
             data["analisys"] = analise if isinstance(analise, list) else data["analisys"]
             response = requests.post(
-                url="https://primary-production-73f0.up.railway.app/webhook-test/publish/post",
+                url="https://primary-production-73f0.up.railway.app/webhook/publish/post",
                 headers=headers,
                 json=data
             )
@@ -105,7 +105,7 @@ def schedule_all_sessions(scheduler: AsyncIOScheduler, sessions_analisys: dict):
                     if not one_is_fetched:
                         scheduler.add_job(
                             fetch_and_store_analysis,
-                            trigger="data",
+                            trigger="date",
                             run_date=run_time,
                             args=[job_id, type_event, year, event, n_session, analises],
                             id=job_id,
